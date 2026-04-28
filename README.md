@@ -1,4 +1,4 @@
-# CashLogger — your digital financial diary
+# CashLogger — your financial digital diary
 
 Stack: Python 3.14+, aiogram 3x, SQLAlchemy, PostgreSQL
 
