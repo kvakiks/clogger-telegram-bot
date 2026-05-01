@@ -22,7 +22,6 @@ class Base(AsyncAttrs, DeclarativeBase):
 class User(Base):
     __tablename__ = 'users'
 
-    id: Mapped[int] = mapped_column(Integer, autoincrement=True)
     tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
 
@@ -31,7 +30,7 @@ class Consumption(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True) 
 
-    consumer_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.tg_id'), ondelete='CASCADE')
+    consumer_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.tg_id'))
 
     category: Mapped[str] = mapped_column(String(30), nullable=False)
     spent: Mapped[int] = mapped_column(Integer, nullable=False)

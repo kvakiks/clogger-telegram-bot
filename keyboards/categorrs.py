@@ -1,8 +1,28 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 main = InlineKeyboardMarkup(inline_keyboard=[
-        InlineKeyboardButton(text='Список категорий', callback_data='categories')
+    [InlineKeyboardButton(text='Список категорий', callback_data='categories')],
+    [InlineKeyboardButton(text='Отчет по расходам', callback_data='reports')]
     ])
+
+reports = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text='День', callback_data='report_1d'),
+        InlineKeyboardButton(text='Неделя', callback_data='report_7d'),
+    ],
+    [
+        InlineKeyboardButton(text='2 недели', callback_data='report_14d'),
+        InlineKeyboardButton(text='Месяц', callback_data='report_30d'),
+    ],
+    [
+        InlineKeyboardButton(text='Квартал', callback_data='report_90d'),
+    ],
+])
+
+admin = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text='Количество пользователей', callback_data='admin_users_count')],
+    [InlineKeyboardButton(text='Список пользователей', callback_data='admin_users_list')],
+])
 
 categories = [
     '🏠 Жилье', '🛒 Продукты', '🚗 Транспорт', '💊 Здоровье',
@@ -24,7 +44,7 @@ def get_simple_formatted_list(cats):
         
         lines.append('    '.join(pair))
 
-    footer = '\n\nВведи "<категория> <сумма>" в чат, чтобы внести расход\nПример: "Еда 470"'
+    footer = '\n\nВведи "&lt;категория&gt; &lt;сумма&gt;" в чат, чтобы внести расход\nПример: "Еда 470"'
     
     return header + '\n'.join(lines) + footer
 

@@ -9,6 +9,8 @@ from aiogram import Bot, Dispatcher
 from handlers.user import user      # Добавить админ-панель
 
 from database.engine import create_db
+from database.engine import session_maker
+from middlewares.db import DataBaseSession
 
 
 TOKEN = os.getenv("TOKEN")
@@ -21,6 +23,7 @@ async def main():
     await create_db()
     bot = Bot(token=TOKEN)
     dp = Dispatcher()
+    dp.update.middleware(DataBaseSession(session_maker))
     dp.include_router(user)
     await dp.start_polling(bot)
 
