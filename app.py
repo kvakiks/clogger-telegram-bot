@@ -6,7 +6,7 @@ load_dotenv()
 
 import logging
 from aiogram import Bot, Dispatcher
-from handlers.user import user      # Добавить админ-панель
+from handlers.user import user      
 
 from database.engine import create_db
 from database.engine import session_maker
@@ -18,7 +18,7 @@ TOKEN = os.getenv("TOKEN")
 logging.basicConfig(level=logging.INFO)
 
 
-# Запуск процесса поллинга новых апдейтов
+
 async def main():
     await create_db()
     bot = Bot(token=TOKEN)

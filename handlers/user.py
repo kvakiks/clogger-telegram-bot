@@ -1,6 +1,10 @@
 import os
+
+from dotenv import load_dotenv
+load_dotenv()
+
 from aiogram import Router
-from aiogram.filters import CommandStart, StateFilter
+from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.types import Message, CallbackQuery
 from aiogram import F
 
@@ -17,12 +21,12 @@ from database.models import User
 from database.requests import (
     add_expense,
     get_or_create_user,
-    get_total_spent_for_days,
+    get_spending_by_category_for_days,
     get_users_count,
     get_users_list,
 )
 
-user = Router()                             # Рутер
+user = Router()                             
 
 ADMIN_IDS = {
     int(admin_id.strip())
@@ -30,18 +34,21 @@ ADMIN_IDS = {
     if admin_id.strip().isdigit()
 }
 
-class Test(StatesGroup):                    # Состояния
+dev = os.getenv("DEVELOPERS_CONTACT")
+
+class Test(StatesGroup):               
     choose_currency = State()
     spend = State()
 
 
-@user.message(CommandStart())                                   # Старт
+@user.message(CommandStart())                                 
 async def start(message: Message, state: FSMContext, session: AsyncSession):
+    await state.clear()
     user_db = await session.scalar(select(User).where(User.tg_id == message.from_user.id))
     if user_db:
         await state.set_state(Test.spend)
         await message.answer(
-            f'С возвращением! Текущая валюта: {user_db.currency}.\n'
+            f'Бот перезапущен. Текущая валюта: {user_db.currency}.\n'
             'Продолжай вносить расходы в формате "<категория> <сумма>".',
             reply_markup=kb_cat.main,
         )
@@ -54,21 +61,48 @@ async def start(message: Message, state: FSMContext, session: AsyncSession):
         reply_markup=kb_cur.main,
     )
 
+@user.message(Command('help'))
+async def help_command(message: Message):
+    text = '<i>Как пользоваться?</i>\n\nПросто записывай расходы в формате &lt;категория&gt; &lt;сумма&gt;, бот все посчитает и по запросу предоставит сводку.\n\nОтчеты и другие команды находятся в меню слева.\n\n⏬ Обратная связь ⏬'
+    await message.answer(text, parse_mode='HTML', reply_markup=kb_cat.help)
+
+
+@user.message(Command('categories'))
+async def categories_command(message: Message):
+    await message.answer(kb_cat.CATEGORIES, parse_mode='HTML')
+
+
+@user.callback_query(F.data == 'help_categories')
+async def help_categories_callback(callback: CallbackQuery):
+    await callback.message.edit_text(kb_cat.CATEGORIES, parse_mode='HTML', reply_markup=None)
+    await callback.answer()
+
+
+@user.callback_query(F.data == 'help_contact_devs')
+async def help_contact_devs_callback(callback: CallbackQuery):
+    await callback.message.edit_text(f'Напиши разработчикам: {dev}')
+    await callback.answer()
+
 
 currs = ['RUB', 'ILS', 'EUR', 'USD', 'KZT', 'GEL']
 
-@user.callback_query(F.data.in_(currs))                           # Выбор валюты
+@user.callback_query(F.data.in_(currs))                          
 async def choice(callback: CallbackQuery, state: FSMContext, session: AsyncSession):  
     selected_currency = callback.data
     tg_user_id = callback.from_user.id
+    user_db = await session.scalar(select(User).where(User.tg_id == tg_user_id))
+
+    if user_db:
+        await state.set_state(Test.spend)
+        await callback.answer(f"Валюта уже выбрана, для смены пиши {dev}")
+        return
 
     await get_or_create_user(session, tg_user_id, selected_currency)
 
-    # FSM update
     await state.set_state(Test.spend)
 
     await callback.answer()
-    await callback.message.answer(f'Отлично! Твоя валюта: {selected_currency}.\n\nТеперь можешь записывать расходы в формате:\n\n"<категория> <сумма>"\nПример: "Спорт 1500"\n\nСписок категорий доступен по кнопке ниже:', reply_markup=kb_cat.main)
+    await callback.message.answer(f'Отлично! Твоя валюта: {selected_currency}.\n\nТеперь можешь записывать расходы в формате:\n\n"<категория> <сумма>"\nПример: "Спорт 1500"\n\n⏬ Список категорий доступен по кнопке ниже:', reply_markup=kb_cat.main)
 
 
 @user.message(F.text == '/admin')
@@ -83,7 +117,7 @@ async def admin_panel(message: Message):
 @user.callback_query(F.data == 'admin_users_count')
 async def admin_users_count(callback: CallbackQuery, session: AsyncSession):
     if callback.from_user.id not in ADMIN_IDS:
-        await callback.answer("Нет доступа", show_alert=True)
+        await callback.answer("Нет доступа")
         return
 
     users_count = await get_users_count(session)
@@ -94,12 +128,12 @@ async def admin_users_count(callback: CallbackQuery, session: AsyncSession):
 @user.callback_query(F.data == 'admin_users_list')
 async def admin_users_list(callback: CallbackQuery, session: AsyncSession):
     if callback.from_user.id not in ADMIN_IDS:
-        await callback.answer("Нет доступа", show_alert=True)
+        await callback.answer("Нет доступа")
         return
 
     users = await get_users_list(session, limit=100)
     if not users:
-        await callback.message.answer("Список пользователей пуст.")
+        await callback.message.answer('Список пользователей пуст.')
         await callback.answer()
         return
 
@@ -108,7 +142,7 @@ async def admin_users_list(callback: CallbackQuery, session: AsyncSession):
     await callback.answer()
 
 
-@user.callback_query(Test.spend, F.data == 'categories')          # Показ списка категорий
+@user.callback_query(Test.spend, F.data == 'categories')          
 async def show_categories(callback: CallbackQuery):
     await callback.message.edit_text(kb_cat.CATEGORIES, parse_mode='HTML', reply_markup=None)
     await callback.answer()
@@ -116,8 +150,17 @@ async def show_categories(callback: CallbackQuery):
 
 @user.callback_query(Test.spend, F.data == 'reports')
 async def show_reports(callback: CallbackQuery):
-    await callback.message.answer('Выбери период для отчета:', reply_markup=kb_cat.reports)
+    await send_reports_menu(callback.message)
     await callback.answer()
+
+
+@user.message(Test.spend, Command('reports'))
+async def show_reports_command(message: Message):
+    await send_reports_menu(message)
+
+
+async def send_reports_menu(message: Message):
+    await message.answer('Выбери период для отчета:', reply_markup=kb_cat.reports)
 
 
 REPORT_PERIODS = {
@@ -133,7 +176,6 @@ REPORT_PERIODS = {
 async def report_by_period(callback: CallbackQuery, session: AsyncSession):
     tg_user_id = callback.from_user.id
     label, days = REPORT_PERIODS[callback.data]
-    total = await get_total_spent_for_days(session, tg_user_id, days)
 
     user_db = await session.scalar(select(User).where(User.tg_id == tg_user_id))
     if not user_db:
@@ -141,7 +183,19 @@ async def report_by_period(callback: CallbackQuery, session: AsyncSession):
         await callback.answer()
         return
 
-    await callback.message.answer(f'Твои расходы {label}: {total} {user_db.currency}')
+    breakdown, total = await get_spending_by_category_for_days(session, tg_user_id, days)
+    cur = user_db.currency
+
+    if not breakdown:
+        text = f'<b>Расходы {label}</b>\n\nЗа этот период записей нет.\n\n<b>Итого: 0 {cur}</b>'
+    else:
+        lines = [f'<b>Расходы {label}</b>\n']
+        for cat, amount in breakdown:
+            lines.append(f'— <i>{cat.capitalize()}</i>:   {amount}')
+        lines.extend(['', f'<b>Итого: {total} {cur}</b>'])
+        text = '\n'.join(lines)
+
+    await callback.message.edit_text(text, parse_mode='HTML')
     await callback.answer()
 
 
@@ -156,7 +210,7 @@ async def spend(message: Message, state: FSMContext, session: AsyncSession):
     cat_input = user_spent[0].lower()
 
     if not cat_input in kb_cat.VALID_CATEGORIES:
-        await message.answer('Извини, не понял. Убедись, что указана верная категория.')      # Кнопка списка категорий
+        await message.answer('Извини, не понял. Убедись, что указана верная категория.')      
         return
 
     if not user_spent[1].isdigit():
